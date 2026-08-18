@@ -85,3 +85,17 @@ async def get_mission_fatigue(mission_id: int, db: AsyncSession) -> List[dict]:
         }
         for a in assessments
     ]
+
+
+async def delete_mission(mission_id: int, db: AsyncSession) -> bool:
+    """Delete a mission and all its associated events. Returns True if deleted, False if not found."""
+    from sqlalchemy import delete as sa_delete
+    mission = await get_mission_by_id(mission_id, db)
+    if mission is None:
+        return False
+    # Remove related events first to satisfy FK constraints
+    await db.execute(sa_delete(MissionEvent).where(MissionEvent.mission_id == mission_id))
+    await db.delete(mission)
+    await db.commit()
+    return True
+

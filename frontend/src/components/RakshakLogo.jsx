@@ -1,15 +1,16 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 
 /**
  * RAKSHAK Logo — uses the official shield emblem image.
  * In sidebar: shows icon + wordmark (or just icon when collapsed).
- * On login: shows larger version.
+ * Clicking it navigates to /dashboard when clickable is true.
  */
-export default function RakshakLogo({ collapsed = false, size = 'normal' }) {
+export default function RakshakLogo({ collapsed = false, size = 'normal', clickable = true }) {
   const imgSize = size === 'large' ? 72 : size === 'small' ? 30 : 38;
 
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', userSelect: 'none' }}>
+  const content = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', userSelect: 'none', cursor: clickable ? 'pointer' : 'default' }}>
       {/* Official shield logo image */}
       <img
         src="/rakshak-logo.png"
@@ -43,10 +44,21 @@ export default function RakshakLogo({ collapsed = false, size = 'normal' }) {
             color: '#94A3B8',
             marginTop: '0.2rem',
           }}>
-            Soldier Health & Fatigue
+            Soldier Health &amp; Fatigue
           </span>
         </div>
       )}
     </div>
   );
+
+  if (clickable) {
+    return (
+      <Link to="/dashboard" style={{ textDecoration: 'none', color: 'inherit', display: 'inline-flex' }}>
+        {content}
+      </Link>
+    );
+  }
+
+  return content;
 }
+

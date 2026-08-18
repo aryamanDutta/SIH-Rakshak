@@ -18,11 +18,13 @@ export default function SquadMonitoring() {
   const loadSquads = useCallback(async () => {
     const sq = await api.squads.list().catch(() => []);
     setSquads(sq);
-    if (sq.length && !selected) setSelected(squadId ? parseInt(squadId) : sq[0].id);
+    if (selected === null && sq.length > 0) {
+      setSelected(squadId ? parseInt(squadId) : sq[0].id);
+    }
   }, [squadId, selected]);
 
   const loadStatus = useCallback(async (id) => {
-    if (!id) return;
+    if (id === null || id === undefined) return;
     try {
       const s = await api.squads.status(id);
       setStatus(s);
@@ -35,10 +37,10 @@ export default function SquadMonitoring() {
   }, []);
 
   useEffect(() => { loadSquads(); }, [loadSquads]);
-  useEffect(() => { if (selected) loadStatus(selected); }, [selected, loadStatus]);
+  useEffect(() => { if (selected !== null) loadStatus(selected); }, [selected, loadStatus]);
 
   useEffect(() => {
-    const t = setInterval(() => { if (selected) loadStatus(selected); }, 4000);
+    const t = setInterval(() => { if (selected !== null) loadStatus(selected); }, 4000);
     return () => clearInterval(t);
   }, [selected, loadStatus]);
 
@@ -73,8 +75,10 @@ export default function SquadMonitoring() {
     <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 className="page-title">Squad Health &amp; Fatigue Monitor</h1>
-          <p className="page-subtitle">Real-time tactical roster &amp; individual fatigue risk scoring</p>
+          <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+            <Users size={22} color="var(--saffron)" /> Squad Operations &amp; Unit Monitoring
+          </h1>
+          <p className="page-subtitle">Unit-level telemetry, squad commander info &amp; squad personnel scoring</p>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           {squads.map((sq) => (

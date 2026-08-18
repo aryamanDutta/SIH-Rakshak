@@ -75,7 +75,7 @@ export default function SoldierProfile() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-          <button className="btn btn-icon" onClick={() => navigate(-1)} title="Back">
+          <button className="btn btn-icon" onClick={() => navigate('/soldiers')} title="Back to Soldiers">
             <ArrowLeft size={18} />
           </button>
           <div>

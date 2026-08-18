@@ -30,7 +30,6 @@ export default function AppShell({ children, user, onLogout }) {
       <Sidebar
         collapsed={collapsed}
         onToggleCollapse={() => setCollapsed(!collapsed)}
-        onOpenSettings={() => setShowSettings(true)}
       />
 
       {/* Main Wrapper */}

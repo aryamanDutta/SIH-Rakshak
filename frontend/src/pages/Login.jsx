@@ -53,7 +53,7 @@ export default function Login({ onLogin }) {
       {/* ── Login card (100% UNCHANGED) ── */}
       <div className="card" style={{ width: '420px', padding: '2.25rem', boxShadow: 'var(--shadow-lg)', position: 'relative', zIndex: 1 }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: '1.5rem' }}>
-          <RakshakLogo size="large" />
+          <RakshakLogo size="large" clickable={false} />
           <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
             Tactical Operations Command &amp; Telemetry
           </p>

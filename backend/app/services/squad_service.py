@@ -41,10 +41,17 @@ async def get_squad_soldiers(squad_id: int, db: AsyncSession) -> List[Soldier]:
 async def get_squad_status(squad_id: int, db: AsyncSession) -> dict:
     """
     Aggregates individual soldier states into squad-level summary.
+    If squad_id is 0, aggregates across ALL active soldiers in the system.
     Returns: avg_fatigue, risk_distribution, highest_risk_soldier_id, active_alert_count
     """
-    soldiers = await get_squad_soldiers(squad_id, db)
-    squad = await get_squad_by_id(squad_id, db)
+    if squad_id == 0:
+        from app.services.soldier_service import get_all_soldiers
+        soldiers = await get_all_soldiers(db)
+        squad_name = "All Personnel"
+    else:
+        soldiers = await get_squad_soldiers(squad_id, db)
+        squad = await get_squad_by_id(squad_id, db)
+        squad_name = squad.name if squad else "Unknown Squad"
 
     soldier_states = []
     fatigue_scores = []
@@ -125,16 +132,19 @@ async def get_squad_status(squad_id: int, db: AsyncSession) -> dict:
         })
 
     # Count active (unacknowledged) alerts
-    alerts_result = await db.execute(
-        select(Alert)
-        .join(Soldier)
-        .where(Soldier.squad_id == squad_id, Alert.is_acknowledged == False)
-    )
+    if squad_id == 0:
+        alerts_result = await db.execute(select(Alert).where(Alert.is_acknowledged == False))
+    else:
+        alerts_result = await db.execute(
+            select(Alert)
+            .join(Soldier)
+            .where(Soldier.squad_id == squad_id, Alert.is_acknowledged == False)
+        )
     active_alerts = list(alerts_result.scalars().all())
 
     return {
         "squad_id": squad_id,
-        "squad_name": squad.name if squad else "",
+        "squad_name": squad_name,
         "total_soldiers": len(soldiers),
         "soldiers": soldier_states,
         "avg_fatigue_score": round(sum(fatigue_scores) / len(fatigue_scores), 2) if fatigue_scores else 0.0,

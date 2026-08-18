@@ -1,22 +1,24 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, User, Flag,
-  BarChart3, Cpu, Activity, Settings, ChevronLeft, ChevronRight
+  BarChart3, Cpu, Activity, FileText, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import RakshakLogo from './RakshakLogo';
 
-export default function Sidebar({ collapsed, onToggleCollapse, onOpenSettings }) {
+export default function Sidebar({ collapsed, onToggleCollapse }) {
   const location = useLocation();
+  const [hoveredItem, setHoveredItem] = useState(null);
 
   const navItems = [
     { path: '/dashboard',  label: 'Dashboard',        icon: LayoutDashboard },
     { path: '/squads',     label: 'Squad Monitoring',  icon: Users },
-    { path: '/soldiers/1', label: 'Soldiers',          icon: User,     matchPrefix: '/soldiers' },
+    { path: '/soldiers',   label: 'Soldiers',          icon: User,     matchPrefix: '/soldiers' },
     { path: '/missions',   label: 'Missions',          icon: Flag },
     { path: '/analytics',  label: 'Analytics',         icon: BarChart3 },
     { path: '/ai-insights',label: 'AI Insights',       icon: Cpu },
     { path: '/simulation', label: 'Simulation',        icon: Activity },
+    { path: '/report',     label: 'Report',            icon: FileText },
   ];
 
   return (
@@ -63,7 +65,6 @@ export default function Sidebar({ collapsed, onToggleCollapse, onOpenSettings })
             <NavLink
               key={item.path}
               to={item.path}
-              title={collapsed ? item.label : undefined}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -81,9 +82,18 @@ export default function Sidebar({ collapsed, onToggleCollapse, onOpenSettings })
               }}
               onMouseEnter={(e) => {
                 if (!isActive) e.currentTarget.style.background = '#EDE6DB';
+                if (collapsed) {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setHoveredItem({
+                    label: item.label,
+                    top: rect.top + rect.height / 2,
+                    left: rect.right + 10,
+                  });
+                }
               }}
               onMouseLeave={(e) => {
                 if (!isActive) e.currentTarget.style.background = 'transparent';
+                setHoveredItem(null);
               }}
             >
               <Icon
@@ -95,34 +105,6 @@ export default function Sidebar({ collapsed, onToggleCollapse, onOpenSettings })
             </NavLink>
           );
         })}
-
-        {/* Settings button */}
-        <button
-          onClick={onOpenSettings}
-          title={collapsed ? 'Settings' : undefined}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.65rem',
-            padding: collapsed ? '0.65rem' : '0.6rem 0.85rem',
-            justifyContent: collapsed ? 'center' : 'flex-start',
-            borderRadius: '10px',
-            border: 'none',
-            background: 'transparent',
-            fontSize: '0.875rem',
-            fontWeight: 500,
-            color: '#64748B',
-            cursor: 'pointer',
-            transition: 'background 150ms ease',
-            marginTop: '0.5rem',
-            width: '100%',
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = '#EDE6DB')}
-          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-        >
-          <Settings size={18} color="#64748B" strokeWidth={2} />
-          {!collapsed && <span>Settings</span>}
-        </button>
       </nav>
 
       {/* Footer */}
@@ -184,8 +166,21 @@ export default function Sidebar({ collapsed, onToggleCollapse, onOpenSettings })
             cursor: 'pointer',
             transition: 'background 150ms ease',
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = '#EDE6DB')}
-          onMouseLeave={(e) => (e.currentTarget.style.background = '#FFFFFF')}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#EDE6DB';
+            if (collapsed) {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setHoveredItem({
+                label: 'Expand sidebar',
+                top: rect.top + rect.height / 2,
+                left: rect.right + 10,
+              });
+            }
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = '#FFFFFF';
+            setHoveredItem(null);
+          }}
         >
           {collapsed
             ? <ChevronRight size={16} />
@@ -193,6 +188,47 @@ export default function Sidebar({ collapsed, onToggleCollapse, onOpenSettings })
           }
         </button>
       </div>
+
+      {/* Floating Popout Badge when Sidebar is Collapsed */}
+      {collapsed && hoveredItem && (
+        <div
+          style={{
+            position: 'fixed',
+            top: `${hoveredItem.top}px`,
+            left: `${hoveredItem.left}px`,
+            transform: 'translateY(-50%)',
+            background: '#1E293B',
+            color: '#FFFFFF',
+            padding: '0.45rem 0.85rem',
+            borderRadius: '8px',
+            fontSize: '0.82rem',
+            fontWeight: 600,
+            whiteSpace: 'nowrap',
+            boxShadow: '0 4px 16px rgba(15, 23, 42, 0.25)',
+            zIndex: 9999,
+            pointerEvents: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              left: '-5px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              width: 0,
+              height: 0,
+              borderTop: '5px solid transparent',
+              borderBottom: '5px solid transparent',
+              borderRight: '5px solid #1E293B',
+            }}
+          />
+          <span>{hoveredItem.label}</span>
+        </div>
+      )}
     </aside>
   );
 }
+

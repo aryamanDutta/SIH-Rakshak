@@ -92,3 +92,11 @@ async def get_mission_timeline(mission_id: int, db: AsyncSession = Depends(get_d
 @router.get("/{mission_id}/fatigue")
 async def get_mission_fatigue(mission_id: int, db: AsyncSession = Depends(get_db)):
     return await mission_service.get_mission_fatigue(mission_id, db)
+
+@router.delete("/{mission_id}")
+async def delete_mission(mission_id: int, db: AsyncSession = Depends(get_db)):
+    deleted = await mission_service.delete_mission(mission_id, db)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Mission not found")
+    return {"detail": "Mission deleted successfully"}
+

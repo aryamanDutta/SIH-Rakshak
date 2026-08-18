@@ -29,6 +29,7 @@ export const api = {
     create: (data) => request('/soldiers', { method: 'POST', body: JSON.stringify(data) }),
     fatigue: (id) => request(`/soldiers/${id}/fatigue`),
     readings: (id, limit = 50) => request(`/soldiers/${id}/readings?limit=${limit}`),
+    history: (id) => request(`/soldiers/${id}/history`),
     baseline: (id) => request(`/soldiers/${id}/baseline`),
     alerts: (id) => request(`/soldiers/${id}/alerts`),
   },
@@ -47,6 +48,7 @@ export const api = {
     get: (id) => request(`/missions/${id}`),
     start: (data) => request('/missions/start', { method: 'POST', body: JSON.stringify(data) }),
     end: (id) => request(`/missions/${id}/end`, { method: 'POST' }),
+    delete: (id) => request(`/missions/${id}`, { method: 'DELETE' }),
     events: (id) => request(`/missions/${id}/events`),
   },
 
