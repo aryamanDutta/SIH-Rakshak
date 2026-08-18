@@ -1,47 +1,66 @@
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
+import { Cpu, AlertTriangle, CheckCircle2, ShieldAlert, Info, ArrowRight } from 'lucide-react';
 import api from '../api/client';
+import RiskBadge from '../components/RiskBadge';
 
-/**
- * AI Insights page — heuristic pattern explanations and recommendations.
- * Pulls from live fatigue/baseline data; does NOT make medical claims.
- */
 export default function AIInsights() {
   const [soldiers, setSoldiers] = useState([]);
   const [insights, setInsights] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const generateInsights = useCallback((soldiers) => {
+  const generateInsights = useCallback((soldiersList) => {
     const out = [];
-    for (const s of soldiers) {
+
+    for (const s of soldiersList) {
       const fa = s.latest_fatigue;
       if (!fa) continue;
       const score = fa.fatigue_score ?? 0;
       const cat = fa.risk_category ?? 'NORMAL';
       const c = fa.contributors ?? {};
 
+      const sortedContribs = Object.entries(c).sort(([, a], [, b]) => b - a);
+      const [topKey] = sortedContribs[0] || ['hr_deviation', 0];
+
+      let explanationText = '';
+      if (topKey === 'hr_deviation') {
+        explanationText = `Fatigue risk is driven primarily due to increased heart-rate deviation above ${s.name}'s personal baseline.`;
+      } else if (topKey === 'hrv_deterioration') {
+        explanationText = `Fatigue risk is driven primarily by reduced parasympathetic HRV (RMSSD) tone relative to personal baseline.`;
+      } else if (topKey === 'temperature_trend') {
+        explanationText = `Fatigue risk is driven primarily by an upward skin temperature slope indicating heat accumulation.`;
+      } else if (topKey === 'activity_load') {
+        explanationText = `Fatigue risk is driven primarily by continuous physical exertion load.`;
+      }
+
       if (cat === 'CRITICAL') {
         out.push({
           soldier: s,
           severity: 'critical',
-          title: `Critical fatigue risk — ${s.name}`,
-          body: `Score ${score.toFixed(0)}/100. Dominant contributors: ${topContributors(c)}. Recommend immediate rest rotation and assessment.`,
-          action: 'Immediate rest rotation recommended.',
+          title: `CRITICAL Fatigue Warning — ${s.name}`,
+          score,
+          contributors: c,
+          body: `${explanationText} Overall fatigue score is ${score.toFixed(0)}/100 (Critical threshold crossed).`,
+          action: 'Operational consideration: immediate rest rotation and tactical recovery assessment.',
         });
       } else if (cat === 'HIGH') {
         out.push({
           soldier: s,
           severity: 'high',
-          title: `High fatigue — ${s.name}`,
-          body: `Score ${score.toFixed(0)}/100. Top factors: ${topContributors(c)}. Monitor closely; consider workload redistribution.`,
-          action: 'Monitor and consider workload redistribution.',
+          title: `HIGH Fatigue Alert — ${s.name}`,
+          score,
+          contributors: c,
+          body: `${explanationText} Overall fatigue score is ${score.toFixed(0)}/100.`,
+          action: 'Operational consideration: review soldier for rest/recovery break.',
         });
       } else if (cat === 'ELEVATED') {
         out.push({
           soldier: s,
           severity: 'elevated',
-          title: `Elevated fatigue — ${s.name}`,
-          body: `Score ${score.toFixed(0)}/100. Early fatigue indicators detected: ${topContributors(c)}.`,
-          action: 'Schedule hydration and rest break.',
+          title: `ELEVATED Fatigue Warning — ${s.name}`,
+          score,
+          contributors: c,
+          body: `${explanationText} Overall fatigue score is ${score.toFixed(0)}/100. Early fatigue markers detected.`,
+          action: 'Operational consideration: monitor personnel closely during next patrol phase.',
         });
       }
 
@@ -49,8 +68,10 @@ export default function AIInsights() {
         out.push({
           soldier: s,
           severity: 'info',
-          title: `Baseline calibrating — ${s.name}`,
-          body: `Personal physiological baseline not yet validated (needs ≥30 readings). Current scores use population-level defaults — may be less accurate.`,
+          title: `Baseline Calibration — ${s.name}`,
+          score: 0,
+          contributors: {},
+          body: `Personal physiological baseline is currently calibrating. Risk engine is utilizing population fallback thresholds.`,
           action: null,
         });
       }
@@ -60,8 +81,10 @@ export default function AIInsights() {
       out.push({
         soldier: null,
         severity: 'info',
-        title: 'All personnel within normal parameters',
-        body: 'No elevated fatigue indicators detected across monitored soldiers. System is running nominal.',
+        title: 'All Monitored Personnel Operating Within Nominal Parameters',
+        score: 0,
+        contributors: {},
+        body: 'No elevated fatigue indicators or physiological anomalies detected across monitored squad personnel.',
         action: null,
       });
     }
@@ -73,9 +96,9 @@ export default function AIInsights() {
     try {
       const sol = await api.soldiers.list().catch(() => []);
       const detailed = await Promise.all(
-        sol.map(s =>
+        sol.map((s) =>
           api.soldiers.fatigue(s.id)
-            .then(fa => ({ ...s, latest_fatigue: fa }))
+            .then((fa) => ({ ...s, latest_fatigue: fa }))
             .catch(() => ({ ...s, latest_fatigue: null }))
         )
       );
@@ -86,68 +109,106 @@ export default function AIInsights() {
     }
   }, [generateInsights]);
 
-  useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t); }, [load]);
+  useEffect(() => { load(); const t = setInterval(load, 6000); return () => clearInterval(t); }, [load]);
 
-  const sev = {
-    critical: { bg:'var(--critical-dim)', border:'var(--critical)', color:'var(--critical)', icon:'🔴' },
-    high:     { bg:'var(--high-dim)',     border:'var(--high)',     color:'var(--high)',     icon:'🟠' },
-    elevated: { bg:'var(--elevated-dim)', border:'var(--elevated)', color:'var(--elevated)', icon:'🟡' },
-    info:     { bg:'var(--bg-surface)',   border:'var(--border)',   color:'var(--accent)',   icon:'ℹ' },
+  const cardStyle = {
+    critical: { bg: 'var(--critical-bg)', border: 'var(--critical-border)', text: 'var(--critical)' },
+    high:     { bg: 'var(--high-bg)',     border: 'var(--high-border)',     text: 'var(--high)' },
+    elevated: { bg: 'var(--elevated-bg)', border: 'var(--elevated-border)', text: 'var(--elevated)' },
+    info:     { bg: 'var(--bg-main)',     border: 'var(--border)',          text: 'var(--navy-dark)' },
   };
 
   return (
     <>
-      <div className="page-header">
-        <h1 className="page-title">AI Insights</h1>
-        <span style={{fontSize:'0.78rem', color:'var(--text-muted)'}}>Heuristic pattern analysis — refreshes every 15s</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h1 className="page-title">AI &amp; Heuristic Insights Engine</h1>
+          <p className="page-subtitle">Transparent explainability breakdown &amp; tactical operational recommendations</p>
+        </div>
+        <span style={{ fontSize: '0.75rem', color: 'var(--ok)', fontWeight: 600 }}>● Live Model Stream</span>
       </div>
 
-      <div className="card" style={{
-        background:'var(--elevated-dim)', border:'1px solid var(--elevated)',
-        fontSize:'0.8rem', color:'var(--elevated)', lineHeight:1.5
-      }}>
-        ⚠ DISCLAIMER: Insights are generated by a rule-based heuristic prototype. 
-        They are NOT AI/ML predictions and NOT clinically validated recommendations. 
-        This system is for SIH demonstration purposes only. 
-        Do not use for actual medical or operational decisions.
+      {/* Model Transparency Disclaimer Card */}
+      <div className="card" style={{ background: 'var(--saffron-light)', borderColor: 'var(--saffron-border)', fontSize: '0.82rem', color: 'var(--navy-dark)', lineHeight: 1.5 }}>
+        ℹ <strong>TRANSPARENT HEURISTIC MODEL:</strong> RAKSHAK utilizes a rule-based heuristic fatigue risk engine combining HR deviation, HRV (RMSSD) deterioration, physical activity load, and skin temperature slope against personalized baseline estimates. This is an SIH software prototype for command operational decision support and is NOT a medical diagnostic tool.
       </div>
 
       {loading ? (
-        <div className="state-center"><div className="spinner-ring" /></div>
+        <div className="state-center"><div className="spinner-ring" /><span>Evaluating fatigue models…</span></div>
       ) : (
-        <div style={{display:'flex', flexDirection:'column', gap:'0.75rem'}}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {insights.map((ins, i) => {
-            const s = sev[ins.severity] ?? sev.info;
+            const st = cardStyle[ins.severity] ?? cardStyle.info;
+            const c = ins.contributors || {};
             return (
-              <div key={i} style={{
-                padding:'1rem 1.25rem',
-                borderRadius:'var(--r-lg)',
-                background: s.bg,
-                border: `1px solid ${s.border}`,
-              }}>
-                <div style={{display:'flex', alignItems:'center', gap:'0.6rem', marginBottom:'0.5rem'}}>
-                  <span style={{fontSize:'1.1rem'}}>{s.icon}</span>
-                  <span style={{fontWeight:600, color: s.color}}>{ins.title}</span>
+              <div
+                key={i}
+                className="card"
+                style={{
+                  background: st.bg,
+                  borderColor: st.border,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.6rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Cpu size={18} color={st.text} />
+                    <span style={{ fontWeight: 800, color: st.text, fontSize: '1.05rem' }}>{ins.title}</span>
+                  </div>
                   {ins.soldier && (
-                    <span style={{
-                      fontSize:'0.7rem', fontFamily:'var(--font-mono)',
-                      color:'var(--text-muted)', marginLeft:'0.25rem'
-                    }}>
-                      {ins.soldier.soldier_uid}
+                    <span className="mono" style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                      {ins.soldier.soldier_uid} · {ins.soldier.call_sign}
                     </span>
                   )}
                 </div>
-                <p style={{fontSize:'0.85rem', color:'var(--text-secondary)', lineHeight:1.6}}>
+
+                <p style={{ fontSize: '0.88rem', color: 'var(--text-primary)', lineHeight: 1.6, marginBottom: '0.85rem' }}>
                   {ins.body}
                 </p>
+
+                {/* Contributor Breakdown Bars */}
+                {Object.keys(c).length > 0 && (
+                  <div style={{ background: 'var(--bg-card)', padding: '0.85rem 1rem', borderRadius: 'var(--r-md)', marginBottom: '0.85rem', border: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '0.6rem' }}>
+                      Contributor Breakdown (Why Fatigue Score Changed)
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                      {[
+                        { label: 'HR Deviation', key: 'hr_deviation', val: c.hr_deviation ?? 0 },
+                        { label: 'HRV Deterioration', key: 'hrv_deterioration', val: c.hrv_deterioration ?? 0 },
+                        { label: 'Activity Load', key: 'activity_load', val: c.activity_load ?? 0 },
+                        { label: 'Temp Trend', key: 'temperature_trend', val: c.temperature_trend ?? 0 },
+                      ].map((item) => (
+                        <div key={item.key} style={{ fontSize: '0.8rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>
+                            <span>{item.label}</span>
+                            <span className="mono" style={{ fontWeight: 700 }}>{(item.val * 100).toFixed(0)}%</span>
+                          </div>
+                          <div style={{ height: '5px', background: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
+                            <div style={{ width: `${Math.min(100, item.val * 100)}%`, height: '100%', background: st.text, borderRadius: '3px' }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {ins.action && (
-                  <div style={{
-                    marginTop:'0.6rem', padding:'0.35rem 0.75rem',
-                    background:'var(--bg-overlay)', borderRadius:'var(--r-sm)',
-                    fontSize:'0.78rem', fontWeight:500, color:'var(--text-primary)',
-                    display:'inline-block'
-                  }}>
-                    💡 {ins.action}
+                  <div
+                    style={{
+                      padding: '0.45rem 0.85rem',
+                      background: 'var(--bg-card)',
+                      borderRadius: 'var(--r-sm)',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      color: 'var(--navy-dark)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      border: '1px solid var(--border)',
+                    }}
+                  >
+                    <ArrowRight size={14} color="var(--saffron)" />
+                    <span>{ins.action}</span>
                   </div>
                 )}
               </div>
@@ -156,66 +217,55 @@ export default function AIInsights() {
         </div>
       )}
 
-      {/* Overall soldier table */}
+      {/* Contributor Table */}
       {soldiers.length > 0 && (
-        <div className="card" style={{padding:0}}>
-          <div style={{padding:'1rem 1.25rem', borderBottom:'1px solid var(--border)', fontWeight:600}}>
-            All Soldiers — Current Status
+        <div className="table-container">
+          <div style={{ padding: '0.9rem 1.25rem', borderBottom: '1px solid var(--border)', fontWeight: 700, fontSize: '0.9rem' }}>
+            Squad Personnel Contributor Matrix
           </div>
-          <div className="table-wrap" style={{border:'none', borderRadius:0}}>
-            <table>
-              <thead>
-                <tr>
-                  <th>UID</th>
-                  <th>Name</th>
-                  <th>Rank</th>
-                  <th>Fatigue</th>
-                  <th>Risk</th>
-                  <th>HR contrib.</th>
-                  <th>HRV contrib.</th>
-                  <th>Baseline</th>
-                </tr>
-              </thead>
-              <tbody>
-                {soldiers.map(s => {
-                  const fa = s.latest_fatigue;
-                  const cat = fa?.risk_category ?? 'NORMAL';
-                  return (
-                    <tr key={s.id}>
-                      <td className="mono text-accent" style={{fontSize:'0.8rem'}}>{s.soldier_uid}</td>
-                      <td>{s.name}</td>
-                      <td style={{color:'var(--text-muted)'}}>{s.rank}</td>
-                      <td className="mono">{fa?.fatigue_score?.toFixed(1) ?? '—'}</td>
-                      <td>
-                        <span className={`badge badge-${cat.toLowerCase()}`}>{cat}</span>
-                      </td>
-                      <td className="mono" style={{fontSize:'0.8rem'}}>
-                        {fa?.contributors?.hr_deviation != null
-                          ? `${(fa.contributors.hr_deviation * 100).toFixed(0)}%` : '—'}
-                      </td>
-                      <td className="mono" style={{fontSize:'0.8rem'}}>
-                        {fa?.contributors?.hrv_deterioration != null
-                          ? `${(fa.contributors.hrv_deterioration * 100).toFixed(0)}%` : '—'}
-                      </td>
-                      <td style={{fontSize:'0.8rem', color: fa?.baseline_valid ? 'var(--ok)' : 'var(--text-muted)'}}>
-                        {fa?.baseline_valid ? '✓ Valid' : '⟳ Calibrating'}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>UID</th>
+                <th>Name</th>
+                <th>Rank</th>
+                <th>Fatigue</th>
+                <th>Risk Category</th>
+                <th>HR Deviation %</th>
+                <th>HRV Deterioration %</th>
+                <th>Baseline Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {soldiers.map((s) => {
+                const fa = s.latest_fatigue;
+                const cat = fa?.risk_category ?? 'NORMAL';
+                const c = fa?.contributors ?? {};
+                return (
+                  <tr key={s.id}>
+                    <td className="mono text-saffron" style={{ fontWeight: 700 }}>{s.soldier_uid}</td>
+                    <td style={{ fontWeight: 600, color: 'var(--navy-dark)' }}>{s.name}</td>
+                    <td style={{ color: 'var(--text-muted)' }}>{s.rank}</td>
+                    <td className="mono" style={{ fontWeight: 700 }}>{fa?.fatigue_score?.toFixed(1) ?? '0.0'}</td>
+                    <td>
+                      <RiskBadge level={cat} />
+                    </td>
+                    <td className="mono">
+                      {c.hr_deviation != null ? `${(c.hr_deviation * 100).toFixed(0)}%` : '—'}
+                    </td>
+                    <td className="mono">
+                      {c.hrv_deterioration != null ? `${(c.hrv_deterioration * 100).toFixed(0)}%` : '—'}
+                    </td>
+                    <td style={{ fontSize: '0.8rem', color: fa?.baseline_valid ? 'var(--ok)' : 'var(--text-muted)' }}>
+                      {fa?.baseline_valid ? '✓ Calibrated' : '⟳ Calibrating'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </>
   );
-}
-
-function topContributors(c) {
-  return Object.entries(c)
-    .sort(([,a], [,b]) => b - a)
-    .slice(0, 2)
-    .map(([k, v]) => `${k.replace(/_/g, ' ')} (${(v * 100).toFixed(0)}%)`)
-    .join(', ');
 }

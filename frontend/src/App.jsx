@@ -23,11 +23,14 @@ export default function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/squads" element={<SquadMonitoring />} />
           <Route path="/squads/:squadId" element={<SquadMonitoring />} />
+          <Route path="/soldiers" element={<SquadMonitoring />} />
           <Route path="/soldiers/:soldierId" element={<SoldierProfile />} />
           <Route path="/missions" element={<MissionMonitoring />} />
           <Route path="/analytics" element={<Analytics />} />
+          <Route path="/ai-insights" element={<AIInsights />} />
           <Route path="/insights" element={<AIInsights />} />
           <Route path="/simulation" element={<SimulationControl />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>
     </BrowserRouter>

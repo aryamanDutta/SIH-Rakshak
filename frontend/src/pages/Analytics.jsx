@@ -1,22 +1,16 @@
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, Legend, Cell
+  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend
 } from 'recharts';
+import { BarChart3, TrendingUp, Heart, Activity } from 'lucide-react';
 import api from '../api/client';
-
-const RISK_COLORS = {
-  NORMAL: 'var(--ok)',
-  ELEVATED: 'var(--elevated)',
-  HIGH: 'var(--high)',
-  CRITICAL: 'var(--critical)',
-};
 
 export default function Analytics() {
   const [squads, setSquads] = useState([]);
   const [soldiers, setSoldiers] = useState([]);
   const [selectedSquad, setSelectedSquad] = useState(null);
   const [selectedSoldier, setSelectedSoldier] = useState(null);
+  const [soldierBaseline, setSoldierBaseline] = useState(null);
   const [squadTrend, setSquadTrend] = useState([]);
   const [soldierHistory, setSoldierHistory] = useState([]);
   const [hours, setHours] = useState(6);
@@ -32,45 +26,56 @@ export default function Analytics() {
     if (sq.length && !selectedSquad) setSelectedSquad(sq[0].id);
     if (sol.length && !selectedSoldier) setSelectedSoldier(sol[0].id);
     setLoading(false);
-  }, []);
+  }, [selectedSquad, selectedSoldier]);
 
   useEffect(() => { loadBase(); }, [loadBase]);
 
   useEffect(() => {
     if (!selectedSquad) return;
-    api.analytics.squadTrend(selectedSquad, hours).then(d => setSquadTrend(d?.trend ?? [])).catch(() => {});
+    api.analytics.squadTrend(selectedSquad, hours).then((d) => setSquadTrend(d?.trend ?? [])).catch(() => {});
   }, [selectedSquad, hours]);
 
   useEffect(() => {
     if (!selectedSoldier) return;
-    api.analytics.soldierHistory(selectedSoldier, hours).then(d => setSoldierHistory(d?.history ?? [])).catch(() => {});
+    api.analytics.soldierHistory(selectedSoldier, hours).then((d) => setSoldierHistory(d?.history ?? [])).catch(() => {});
+    api.soldiers.baseline(selectedSoldier).then(setSoldierBaseline).catch(() => setSoldierBaseline(null));
   }, [selectedSoldier, hours]);
 
-  const squadChartData = squadTrend.map(p => ({
-    t: new Date(p.timestamp).toLocaleTimeString(),
-    avg_fatigue: p.avg_fatigue?.toFixed(1),
-    max_fatigue: p.max_fatigue?.toFixed(1),
+  const squadChartData = squadTrend.map((p) => ({
+    time: new Date(p.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    avg: p.avg_fatigue ? parseFloat(p.avg_fatigue.toFixed(1)) : 0,
+    max: p.max_fatigue ? parseFloat(p.max_fatigue.toFixed(1)) : 0,
   }));
 
-  const soldierChartData = soldierHistory.map(p => ({
-    t: new Date(p.timestamp).toLocaleTimeString(),
-    fatigue: p.fatigue_score?.toFixed(1),
-    hr: p.mean_hr?.toFixed(0),
-    rmssd: p.rmssd?.toFixed(1),
-    temp: p.temperature?.toFixed(1),
+  const soldierChartData = soldierHistory.map((p) => ({
+    time: new Date(p.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    fatigue: p.fatigue_score ? parseFloat(p.fatigue_score.toFixed(1)) : 0,
+    hr: p.mean_hr ? Math.round(p.mean_hr) : null,
+    rmssd: p.rmssd ? parseFloat(p.rmssd.toFixed(1)) : null,
   }));
+
+  const currentSoldierObj = soldiers.find((s) => s.id === selectedSoldier);
+  const latestPoint = soldierChartData[soldierChartData.length - 1];
+  const fatigueScores = soldierChartData.map((d) => d.fatigue).filter(Boolean);
+  const currentFatigue = latestPoint?.fatigue ?? 0;
+  const peakFatigue = fatigueScores.length ? Math.max(...fatigueScores) : 0;
+  const avgFatigue = fatigueScores.length ? (fatigueScores.reduce((a, b) => a + b, 0) / fatigueScores.length).toFixed(1) : '0.0';
+  const currentHr = latestPoint?.hr ?? '—';
+  const baseHr = soldierBaseline?.baseline_hr_mean ? Math.round(soldierBaseline.baseline_hr_mean) : 72;
 
   return (
     <>
-      <div className="page-header">
-        <h1 className="page-title">Analytics</h1>
-        <div style={{display:'flex', gap:'0.5rem', alignItems:'center'}}>
-          <span style={{fontSize:'0.78rem', color:'var(--text-muted)'}}>Window:</span>
-          {[1, 6, 12, 24].map(h => (
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h1 className="page-title">Longitudinal Telemetry &amp; Analytics</h1>
+          <p className="page-subtitle">Time-series trend analysis across squads and individual personnel</p>
+        </div>
+        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>Window:</span>
+          {[1, 6, 12, 24].map((h) => (
             <button
               key={h}
-              className={`btn ${hours === h ? 'btn-accent' : ''}`}
-              style={{padding:'0.3rem 0.6rem', fontSize:'0.78rem'}}
+              className={`btn btn-sm ${hours === h ? 'btn-primary' : ''}`}
               onClick={() => setHours(h)}
             >
               {h}h
@@ -80,19 +85,24 @@ export default function Analytics() {
       </div>
 
       {loading ? (
-        <div className="state-center"><div className="spinner-ring" /></div>
+        <div className="state-center"><div className="spinner-ring" /><span>Loading analytics engine…</span></div>
       ) : (
         <>
-          {/* Squad trend */}
+          {/* Squad Fatigue Trend Area Chart */}
           <div className="card">
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem'}}>
-              <div style={{fontWeight:600}}>Squad Fatigue Trend</div>
-              <div style={{display:'flex', gap:'0.5rem'}}>
-                {squads.map(sq => (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div>
+                <div className="card-title">
+                  <BarChart3 size={18} color="var(--saffron)" />
+                  <span>Squad Fatigue Trend — Average vs Peak Risk</span>
+                </div>
+                <div className="card-subtitle">Aggregated continuous fatigue stream across active squad personnel</div>
+              </div>
+              <div style={{ display: 'flex', gap: '0.4rem' }}>
+                {squads.map((sq) => (
                   <button
                     key={sq.id}
-                    className={`btn ${selectedSquad === sq.id ? 'btn-accent' : ''}`}
-                    style={{padding:'0.25rem 0.6rem', fontSize:'0.78rem'}}
+                    className={`btn btn-sm ${selectedSquad === sq.id ? 'btn-saffron' : ''}`}
                     onClick={() => setSelectedSquad(sq.id)}
                   >
                     {sq.name}
@@ -100,80 +110,116 @@ export default function Analytics() {
                 ))}
               </div>
             </div>
-            {squadChartData.length < 2 ? (
-              <div className="state-center" style={{padding:'2rem'}}>
-                Not enough data yet. Start the simulation to collect readings.
-              </div>
-            ) : (
-              <div className="chart-wrap">
+
+            <div style={{ height: '260px', width: '100%' }}>
+              {squadChartData.length < 2 ? (
+                <div className="state-center" style={{ height: '100%' }}>
+                  Collecting time-series data... Start simulation to stream live telemetry.
+                </div>
+              ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={squadChartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis dataKey="t" tick={{fill:'var(--text-muted)', fontSize:10}} interval="preserveStartEnd" />
-                    <YAxis domain={[0,100]} tick={{fill:'var(--text-muted)', fontSize:10}} />
-                    <Tooltip
-                      contentStyle={{background:'var(--bg-surface)', border:'1px solid var(--border)', borderRadius:'var(--r-md)'}}
-                    />
-                    <Legend wrapperStyle={{fontSize:11, color:'var(--text-secondary)'}} />
-                    <Line type="monotone" dataKey="avg_fatigue" stroke="var(--elevated)" dot={false} name="Avg Fatigue" strokeWidth={2} />
-                    <Line type="monotone" dataKey="max_fatigue" stroke="var(--critical)" dot={false} name="Max Fatigue" strokeWidth={2} strokeDasharray="4 2" />
-                  </LineChart>
+                  <AreaChart data={squadChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="sqAvgGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#FF9933" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="#FF9933" stopOpacity={0.0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                    <XAxis dataKey="time" tick={{ fill: '#94A3B8', fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <YAxis domain={[0, 100]} tick={{ fill: '#94A3B8', fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px' }} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Area type="monotone" dataKey="avg" stroke="#FF9933" strokeWidth={3} fillOpacity={1} fill="url(#sqAvgGrad)" name="Squad Avg Fatigue" />
+                    <Area type="monotone" dataKey="max" stroke="#DC2626" strokeWidth={1.5} strokeDasharray="4 4" fillOpacity={0} name="Squad Peak Fatigue" />
+                  </AreaChart>
                 </ResponsiveContainer>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
-          {/* Soldier history */}
+          {/* Soldier Summary Metric Cards */}
+          {currentSoldierObj && (
+            <div className="stat-grid">
+              <div className="stat-card-mini">
+                <span className="label">Selected Soldier</span>
+                <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--navy-dark)' }}>{currentSoldierObj.name}</div>
+                <div className="mono text-saffron" style={{ fontSize: '0.8rem', fontWeight: 600 }}>{currentSoldierObj.soldier_uid}</div>
+              </div>
+              <div className="stat-card-mini">
+                <span className="label">Current Fatigue</span>
+                <div style={{ fontSize: '1.8rem', fontWeight: 800, color: currentFatigue > 55 ? 'var(--critical)' : 'var(--navy-dark)' }}>
+                  {currentFatigue}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Score / 100</div>
+              </div>
+              <div className="stat-card-mini">
+                <span className="label">Peak Fatigue</span>
+                <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--high)' }}>{peakFatigue}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>In selected window</div>
+              </div>
+              <div className="stat-card-mini">
+                <span className="label">Avg Fatigue</span>
+                <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--navy-dark)' }}>{avgFatigue}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>In selected window</div>
+              </div>
+              <div className="stat-card-mini">
+                <span className="label">Current Heart Rate</span>
+                <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--navy-dark)' }}>
+                  {currentHr} <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>BPM</span>
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Baseline: {baseHr} BPM</div>
+              </div>
+            </div>
+          )}
+
+          {/* Soldier Individual History */}
           <div className="card">
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem', flexWrap:'wrap', gap:'0.5rem'}}>
-              <div style={{fontWeight:600}}>Soldier Physiological History</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div>
+                <div className="card-title">
+                  <Activity size={18} color="var(--navy)" />
+                  <span>Individual Personnel Physiological History</span>
+                </div>
+                <div className="card-subtitle">Fatigue Score vs Heart Rate (BPM) &amp; Parasympathetic HRV (RMSSD ms)</div>
+              </div>
               <select
-                style={{padding:'0.35rem 0.7rem', background:'var(--bg-surface)', border:'1px solid var(--border)', borderRadius:'var(--r-md)', color:'var(--text-primary)', fontFamily:'var(--font-sans)', fontSize:'0.82rem', outline:'none'}}
                 value={selectedSoldier ?? ''}
-                onChange={e => setSelectedSoldier(parseInt(e.target.value))}
+                onChange={(e) => setSelectedSoldier(parseInt(e.target.value))}
+                style={{ fontWeight: 600 }}
               >
-                {soldiers.map(s => <option key={s.id} value={s.id}>{s.name} ({s.soldier_uid})</option>)}
+                {soldiers.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name} ({s.soldier_uid})</option>
+                ))}
               </select>
             </div>
-            {soldierChartData.length < 2 ? (
-              <div className="state-center" style={{padding:'2rem'}}>Not enough data. Run simulation first.</div>
-            ) : (
-              <div style={{display:'flex', flexDirection:'column', gap:'1.5rem'}}>
-                {/* Fatigue + HR */}
-                <div>
-                  <div style={{fontSize:'0.78rem', color:'var(--text-muted)', marginBottom:'0.5rem'}}>Fatigue Score &amp; Heart Rate</div>
-                  <div className="chart-wrap">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={soldierChartData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                        <XAxis dataKey="t" tick={{fill:'var(--text-muted)', fontSize:10}} interval="preserveStartEnd" />
-                        <YAxis yAxisId="f" domain={[0,100]} tick={{fill:'var(--text-muted)', fontSize:10}} />
-                        <YAxis yAxisId="hr" orientation="right" tick={{fill:'var(--text-muted)', fontSize:10}} />
-                        <Tooltip contentStyle={{background:'var(--bg-surface)', border:'1px solid var(--border)', borderRadius:'var(--r-md)'}} />
-                        <Legend wrapperStyle={{fontSize:11}} />
-                        <Line yAxisId="f" type="monotone" dataKey="fatigue" stroke="var(--critical)" dot={false} name="Fatigue" strokeWidth={2} />
-                        <Line yAxisId="hr" type="monotone" dataKey="hr" stroke="var(--accent)" dot={false} name="HR (bpm)" strokeWidth={1.5} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
+
+            <div style={{ height: '240px', width: '100%' }}>
+              {soldierChartData.length < 2 ? (
+                <div className="state-center" style={{ height: '100%' }}>
+                  Collecting history data... Start simulation to stream readings.
                 </div>
-                {/* HRV */}
-                <div>
-                  <div style={{fontSize:'0.78rem', color:'var(--text-muted)', marginBottom:'0.5rem'}}>HRV — RMSSD (ms)</div>
-                  <div className="chart-wrap" style={{height:160}}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={soldierChartData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                        <XAxis dataKey="t" tick={{fill:'var(--text-muted)', fontSize:10}} interval="preserveStartEnd" />
-                        <YAxis tick={{fill:'var(--text-muted)', fontSize:10}} />
-                        <Tooltip contentStyle={{background:'var(--bg-surface)', border:'1px solid var(--border)', borderRadius:'var(--r-md)'}} />
-                        <Line type="monotone" dataKey="rmssd" stroke="var(--ok)" dot={false} name="RMSSD (ms)" strokeWidth={1.5} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </div>
-            )}
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={soldierChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="solHrGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#138808" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="#138808" stopOpacity={0.0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                    <XAxis dataKey="time" tick={{ fill: '#94A3B8', fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <YAxis domain={[0, 150]} tick={{ fill: '#94A3B8', fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px' }} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Area type="monotone" dataKey="fatigue" stroke="#DC2626" fillOpacity={0} name="Fatigue Score" strokeWidth={2} />
+                    <Area type="monotone" dataKey="hr" stroke="#138808" fillOpacity={1} fill="url(#solHrGrad)" name="Heart Rate (BPM)" strokeWidth={2} />
+                    <Area type="monotone" dataKey="rmssd" stroke="#FF9933" fillOpacity={0} name="RMSSD HRV (ms)" strokeWidth={1.5} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
+            </div>
           </div>
         </>
       )}

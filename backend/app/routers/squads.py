@@ -7,8 +7,7 @@ router = APIRouter()
 
 @router.get("")
 async def list_squads(db: AsyncSession = Depends(get_db)):
-    squads = await squad_service.get_all_squads(db)
-    return [{"id": s.id, "name": s.name, "unit": s.unit, "commander_name": s.commander_name} for s in squads]
+    return await squad_service.get_all_squads(db)
 
 @router.get("/{squad_id}")
 async def get_squad(squad_id: int, db: AsyncSession = Depends(get_db)):
@@ -26,7 +25,8 @@ async def get_squad_alerts(squad_id: int, db: AsyncSession = Depends(get_db)):
     alerts = await squad_service.get_squad_alerts(squad_id, db)
     return [
         {"id": a.id, "soldier_id": a.soldier_id, "timestamp": a.timestamp.isoformat(),
-         "alert_type": a.alert_type.value, "severity": a.severity.value,
+         "alert_type": a.alert_type.value if hasattr(a.alert_type, 'value') else str(a.alert_type),
+         "severity": a.severity.value if hasattr(a.severity, 'value') else str(a.severity),
          "message": a.message, "fatigue_score_at_alert": a.fatigue_score_at_alert}
         for a in alerts
     ]

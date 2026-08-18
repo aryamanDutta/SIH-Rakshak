@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
-from app.services import soldier_service
+from app.services import soldier_service, alert_service
 
 router = APIRouter()
 
@@ -11,6 +11,40 @@ async def list_soldiers(db: AsyncSession = Depends(get_db)):
     return [{"id": s.id, "soldier_uid": s.soldier_uid, "name": s.name,
              "call_sign": s.call_sign, "rank": s.rank, "squad_id": s.squad_id,
              "is_active": s.is_active} for s in soldiers]
+
+@router.get("/alerts")
+async def get_all_system_alerts(
+    limit: int = Query(default=50, ge=1, le=500),
+    active_only: bool = Query(default=False),
+    db: AsyncSession = Depends(get_db)
+):
+    alerts = await alert_service.get_all_alerts(db, limit=limit, active_only=active_only)
+    return [
+        {
+            "id": a.id,
+            "soldier_id": a.soldier_id,
+            "timestamp": a.timestamp.isoformat(),
+            "alert_type": a.alert_type.value if hasattr(a.alert_type, 'value') else str(a.alert_type),
+            "severity": a.severity.value if hasattr(a.severity, 'value') else str(a.severity),
+            "message": a.message,
+            "is_acknowledged": a.is_acknowledged,
+            "acknowledged_at": a.acknowledged_at.isoformat() if a.acknowledged_at else None,
+            "fatigue_score_at_alert": a.fatigue_score_at_alert,
+            "status": "ACKNOWLEDGED" if a.is_acknowledged else "ACTIVE",
+        }
+        for a in alerts
+    ]
+
+@router.post("/alerts/{alert_id}/acknowledge")
+async def acknowledge_alert(alert_id: int, db: AsyncSession = Depends(get_db)):
+    alert = await alert_service.acknowledge_alert(alert_id, db)
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    return {
+        "status": "acknowledged",
+        "alert_id": alert.id,
+        "acknowledged_at": alert.acknowledged_at.isoformat() if alert.acknowledged_at else None,
+    }
 
 @router.get("/{soldier_id}")
 async def get_soldier(soldier_id: int, db: AsyncSession = Depends(get_db)):
@@ -123,6 +157,7 @@ async def get_soldier_alerts(soldier_id: int, db: AsyncSession = Depends(get_db)
     return [
         {"id": a.id, "timestamp": a.timestamp.isoformat(), "alert_type": a.alert_type.value if hasattr(a.alert_type, 'value') else str(a.alert_type),
          "severity": a.severity.value if hasattr(a.severity, 'value') else str(a.severity), "message": a.message, "is_acknowledged": a.is_acknowledged,
-         "fatigue_score_at_alert": a.fatigue_score_at_alert}
+         "fatigue_score_at_alert": a.fatigue_score_at_alert,
+         "status": "ACKNOWLEDGED" if a.is_acknowledged else "ACTIVE"}
         for a in alerts
     ]

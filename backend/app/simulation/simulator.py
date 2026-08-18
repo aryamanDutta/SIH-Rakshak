@@ -128,6 +128,16 @@ class SimulationManager:
         self.active_scenario: str = DEFAULT_SCENARIO
         self.mission_id: Optional[int] = None
         self._task: Optional[asyncio.Task] = None
+        self.activity_log: List[dict] = []
+        self.log_event("Simulation manager initialized.", "info")
+
+    def log_event(self, message: str, event_type: str = "info") -> None:
+        self.activity_log.insert(0, {
+            "timestamp": datetime.utcnow().isoformat(),
+            "message": message,
+            "type": event_type,
+        })
+        self.activity_log = self.activity_log[:50]
         
     def start(self, soldier_ids: list[int], scenario: str, mission_id: int | None = None) -> None:
         """Initialize simulators. Call launch_task() separately from async context."""
@@ -143,6 +153,7 @@ class SimulationManager:
         self.is_running = True
         self.started_at = datetime.utcnow()
         self.tick_count = 0
+        self.log_event(f"Simulation started for {len(soldier_ids)} soldiers in {self.active_scenario} scenario.", "ok")
 
     def launch_task(self) -> None:
         """Launch the async background loop. Must be called from within an async context."""
@@ -157,6 +168,7 @@ class SimulationManager:
             self._task.cancel()
             self._task = None
         self.started_at = None
+        self.log_event("Simulation stopped.", "warn")
         
     def set_scenario(self, scenario_name: str) -> None:
         """Change scenario for all active simulators."""
@@ -164,6 +176,7 @@ class SimulationManager:
             self.active_scenario = scenario_name
             for sim in self.simulators.values():
                 sim.set_scenario(scenario_name)
+            self.log_event(f"Scenario changed to {scenario_name}.", "info")
         else:
             raise ValueError(f"Unknown scenario: {scenario_name}")
             
@@ -178,6 +191,7 @@ class SimulationManager:
             "tick_count": self.tick_count,
             "tick_rate_hz": SIMULATION_TICK_RATE_HZ,
             "started_at": self.started_at.isoformat() if self.started_at else None,
+            "events": self.activity_log,
         }
         
     async def _run_tick(self, db) -> None:
@@ -207,11 +221,16 @@ class SimulationManager:
 
         for soldier_id in list(self.simulators.keys()):
             try:
-                await process_and_assess(
+                assessment = await process_and_assess(
                     soldier_id=soldier_id,
                     db=db,
                     mission_id=self.mission_id,
                 )
+                if assessment and assessment.get("risk_category") in ("HIGH", "CRITICAL"):
+                    self.log_event(
+                        f"Soldier {soldier_id} crossed {assessment['risk_category']} threshold (fatigue score={assessment['fatigue_score']:.1f}).",
+                        "warn" if assessment["risk_category"] == "HIGH" else "error"
+                    )
             except Exception as exc:
                 print(f"[Pipeline] Error for soldier {soldier_id}: {exc}")
 

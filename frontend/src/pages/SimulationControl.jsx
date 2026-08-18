@@ -1,22 +1,28 @@
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
+import { Activity, Play, Square, RefreshCw, Cpu, Layers, Terminal } from 'lucide-react';
 import api from '../api/client';
 
 export default function SimulationControl() {
   const [status, setStatus] = useState(null);
+  const [scenarios, setScenarios] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [log, setLog] = useState([]);
+  const [clientLog, setClientLog] = useState([]);
 
-  const addLog = (msg, type = 'info') => {
-    setLog(l => [{ msg, type, t: new Date().toLocaleTimeString() }, ...l].slice(0, 50));
+  const addClientLog = (msg, type = 'info') => {
+    setClientLog((l) => [{ msg, type, t: new Date().toLocaleTimeString() }, ...l].slice(0, 20));
   };
 
   const refresh = useCallback(async () => {
     try {
-      const s = await api.simulation.status();
+      const [s, scList] = await Promise.all([
+        api.simulation.status(),
+        api.simulation.scenarios().catch(() => []),
+      ]);
       setStatus(s);
+      setScenarios(scList);
     } catch (e) {
-      setStatus(null);
+      console.error(e);
     } finally {
       setLoading(false);
     }
@@ -24,7 +30,7 @@ export default function SimulationControl() {
 
   useEffect(() => {
     refresh();
-    const t = setInterval(refresh, 5000);
+    const t = setInterval(refresh, 3000);
     return () => clearInterval(t);
   }, [refresh]);
 
@@ -32,10 +38,10 @@ export default function SimulationControl() {
     setBusy(true);
     try {
       await api.simulation.start();
-      addLog('Simulation started.', 'ok');
+      addClientLog('Simulation started.', 'ok');
       await refresh();
     } catch (e) {
-      addLog(`Error: ${e.message}`, 'error');
+      addClientLog(`Error: ${e.message}`, 'error');
     } finally {
       setBusy(false);
     }
@@ -45,10 +51,23 @@ export default function SimulationControl() {
     setBusy(true);
     try {
       await api.simulation.stop();
-      addLog('Simulation stopped.', 'warn');
+      addClientLog('Simulation stopped.', 'warn');
       await refresh();
     } catch (e) {
-      addLog(`Error: ${e.message}`, 'error');
+      addClientLog(`Error: ${e.message}`, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleScenarioChange = async (newScenario) => {
+    setBusy(true);
+    try {
+      await api.simulation.setScenario(newScenario);
+      addClientLog(`Scenario switched to ${newScenario}`, 'ok');
+      await refresh();
+    } catch (e) {
+      addClientLog(`Scenario switch error: ${e.message}`, 'error');
     } finally {
       setBusy(false);
     }
@@ -58,139 +77,167 @@ export default function SimulationControl() {
     setBusy(true);
     try {
       const res = await api.simulation.tick();
-      addLog(`Manual tick: ${res.message ?? 'done'}`, 'ok');
+      addClientLog(`Manual tick executed: ${res.message ?? 'done'}`, 'ok');
       await refresh();
     } catch (e) {
-      addLog(`Tick error: ${e.message}`, 'error');
+      addClientLog(`Tick error: ${e.message}`, 'error');
     } finally {
       setBusy(false);
     }
   };
 
   const running = status?.running ?? false;
-  const logColor = { ok: 'var(--ok)', warn: 'var(--elevated)', error: 'var(--critical)', info: 'var(--text-secondary)' };
+  const currentScenario = status?.scenario || 'PATROL';
+  const backendEvents = status?.events || [];
 
   return (
     <>
-      <div className="page-header">
-        <h1 className="page-title">Simulation Control</h1>
-        <div style={{display:'flex', alignItems:'center', gap:'0.5rem'}}>
-          <span className={`risk-dot ${running ? 'normal' : 'high'}`} />
-          <span style={{fontSize:'0.82rem', color: running ? 'var(--ok)' : 'var(--high)'}}>
-            {running ? 'RUNNING' : 'IDLE'}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h1 className="page-title">Simulation &amp; Scenario Controller</h1>
+          <p className="page-subtitle">Synthetic sensor telemetry engine &amp; hardware ingestion layer</p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span className={`status-dot ${running ? 'normal' : ''}`} style={{ background: running ? 'var(--ok)' : 'var(--text-muted)' }} />
+          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: running ? 'var(--ok)' : 'var(--text-muted)' }}>
+            {running ? 'TELEMETRY STREAMING ACTIVE' : 'STREAM IDLE'}
           </span>
         </div>
       </div>
 
-      <div className="card" style={{
-        fontSize:'0.8rem', color:'var(--accent)', lineHeight:1.5,
-        background:'var(--accent-glow)', border:'1px solid var(--accent-dim)'
-      }}>
-        ℹ This is a software simulator replacing future ESP32 hardware. Sensor data (RR intervals, temperature, 
-        accelerometer) is generated using AR(1) correlated models to simulate realistic physiological signals. 
-        The DataSource interface is hardware-agnostic — swap SimulatorSource for ESP32Source when hardware is ready.
+      {/* Data Source Architecture Card */}
+      <div className="card" style={{ background: 'var(--navy-dark)', color: '#FFFFFF', border: 'none' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: 'var(--saffron)', fontWeight: 700, fontSize: '0.9rem', marginBottom: '0.4rem' }}>
+          <Layers size={18} />
+          <span>DATA SOURCE ARCHITECTURE — HARDWARE AGNOSTIC LAYER</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', fontSize: '0.82rem', marginTop: '0.6rem' }}>
+          <div style={{ padding: '0.75rem', background: '#1E293B', borderRadius: 'var(--r-md)', border: '1px solid #334155' }}>
+            <div style={{ fontWeight: 700, color: 'var(--saffron)', marginBottom: '0.2rem' }}>CURRENT: SimulatorSource</div>
+            <div style={{ color: '#94A3B8', lineHeight: 1.5 }}>
+              Generates correlated AR(1) physiological streams (RR intervals, skin temperature, 3-axis IMU accelerometer) for synthetic soldier validation.
+            </div>
+          </div>
+          <div style={{ padding: '0.75rem', background: '#1E293B', borderRadius: 'var(--r-md)', border: '1px solid #334155' }}>
+            <div style={{ fontWeight: 700, color: 'var(--ok)', marginBottom: '0.2rem' }}>FUTURE: ESP32Source (Post-Selection)</div>
+            <div style={{ color: '#94A3B8', lineHeight: 1.5 }}>
+              Physical wearable harness (ECG, Temp, IMU, ESP32) drops into the <code>DataSource</code> interface without redesigning core baseline or fatigue APIs.
+            </div>
+          </div>
+        </div>
       </div>
 
       {loading ? (
-        <div className="state-center"><div className="spinner-ring" /></div>
+        <div className="state-center"><div className="spinner-ring" /><span>Loading simulation engine…</span></div>
       ) : (
         <>
-          {/* Status cards */}
+          {/* Status Metrics Grid */}
           <div className="stat-grid">
-            <div className="stat-card">
-              <div className="stat-label">Status</div>
-              <div className="stat-value" style={{fontSize:'1.2rem', color: running ? 'var(--ok)' : 'var(--text-muted)'}}>
+            <div className="stat-card-mini">
+              <span className="label">Stream Status</span>
+              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: running ? 'var(--ok)' : 'var(--text-muted)' }}>
                 {running ? '● Running' : '○ Idle'}
               </div>
             </div>
-            <div className="stat-card">
-              <div className="stat-label">Active Soldiers</div>
-              <div className="stat-value">{status?.active_soldiers ?? 0}</div>
+            <div className="stat-card-mini">
+              <span className="label">Active Scenario</span>
+              <div className="text-saffron" style={{ fontSize: '1.3rem', fontWeight: 800 }}>{currentScenario}</div>
             </div>
-            <div className="stat-card">
-              <div className="stat-label">Tick Rate</div>
-              <div className="stat-value" style={{fontSize:'1.2rem'}}>{status?.tick_rate_hz ?? 1} Hz</div>
-              <div className="stat-sub">readings / second / soldier</div>
+            <div className="stat-card-mini">
+              <span className="label">Monitored Personnel</span>
+              <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--navy-dark)' }}>{status?.active_soldiers ?? 0}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Virtual soldiers</div>
             </div>
-            <div className="stat-card">
-              <div className="stat-label">Total Readings</div>
-              <div className="stat-value mono">{status?.total_readings ?? 0}</div>
+            <div className="stat-card-mini">
+              <span className="label">Sampling Rate</span>
+              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--navy-dark)' }}>{status?.tick_rate_hz ?? 1} Hz</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>1 sample / sec</div>
+            </div>
+            <div className="stat-card-mini">
+              <span className="label">Total Readings</span>
+              <div className="mono" style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--navy-dark)' }}>{status?.total_readings ?? 0}</div>
             </div>
           </div>
 
-          {/* Controls */}
-          <div className="card">
-            <div style={{fontWeight:600, marginBottom:'1rem'}}>Controls</div>
-            <div style={{display:'flex', gap:'0.75rem', flexWrap:'wrap'}}>
-              <button
-                className="btn btn-accent"
-                disabled={running || busy}
-                onClick={handleStart}
-              >
-                ▶ Start Simulation
-              </button>
-              <button
-                className="btn btn-danger"
-                disabled={!running || busy}
-                onClick={handleStop}
-              >
-                ■ Stop Simulation
-              </button>
-              <button
-                className="btn"
-                disabled={running || busy}
-                onClick={handleTick}
-                title="Generate one tick of data for all soldiers without running the loop"
-              >
-                ⟳ Manual Tick
-              </button>
-            </div>
-            <p style={{fontSize:'0.75rem', color:'var(--text-muted)', marginTop:'0.75rem', lineHeight:1.6}}>
-              Start simulation to continuously generate sensor readings for all soldiers. 
-              Use Manual Tick for single-step debugging. Stop when finished.
-            </p>
-          </div>
-
-          {/* Data source info */}
-          <div className="card">
-            <div style={{fontWeight:600, marginBottom:'0.75rem'}}>Data Source Architecture</div>
-            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1rem'}}>
-              <div style={{padding:'0.75rem', background:'var(--bg-surface)', borderRadius:'var(--r-md)', border:'1px solid var(--border)'}}>
-                <div style={{fontSize:'0.72rem', textTransform:'uppercase', letterSpacing:'0.07em', color:'var(--accent)', fontWeight:600, marginBottom:'0.4rem'}}>
-                  ✓ CURRENT — SimulatorSource
-                </div>
-                <div style={{fontSize:'0.82rem', color:'var(--text-secondary)', lineHeight:1.6}}>
-                  AR(1) correlated RR-interval streams. Simulates ECG, temperature, IMU.
-                  Realistic physiological patterns with fatigue scenarios.
-                </div>
+          {/* Operational Controls & Scenario Switcher */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', alignItems: 'start' }}>
+            <div className="card">
+              <div className="card-title" style={{ marginBottom: '0.85rem' }}>Stream Controls</div>
+              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.85rem' }}>
+                <button className="btn btn-saffron" disabled={running || busy} onClick={handleStart}>
+                  <Play size={16} />
+                  <span>Start Stream</span>
+                </button>
+                <button className="btn btn-danger" disabled={!running || busy} onClick={handleStop}>
+                  <Square size={16} />
+                  <span>Stop Stream</span>
+                </button>
               </div>
-              <div style={{padding:'0.75rem', background:'var(--bg-surface)', borderRadius:'var(--r-md)', border:'1px solid var(--border)', opacity:0.5}}>
-                <div style={{fontSize:'0.72rem', textTransform:'uppercase', letterSpacing:'0.07em', color:'var(--text-muted)', fontWeight:600, marginBottom:'0.4rem'}}>
-                  FUTURE — ESP32Source
-                </div>
-                <div style={{fontSize:'0.82rem', color:'var(--text-muted)', lineHeight:1.6}}>
-                  Same DataSource interface. Reads from wearable harness over serial/BLE.
-                  Hardware integration after SIH selection.
-                </div>
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                Start simulation to initiate live 1 Hz sensor sampling across all soldiers.
+              </p>
+            </div>
+
+            <div className="card">
+              <div className="card-title" style={{ marginBottom: '0.85rem' }}>Tactical Scenario Switcher</div>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                {['REST', 'PATROL', 'MODERATE_EXERTION', 'HIGH_INTENSITY', 'LONG_DURATION', 'RECOVERY'].map((sc) => (
+                  <button
+                    key={sc}
+                    className={`btn btn-sm ${currentScenario === sc ? 'btn-saffron' : ''}`}
+                    disabled={!running || busy}
+                    onClick={() => handleScenarioChange(sc)}
+                  >
+                    {sc}
+                  </button>
+                ))}
               </div>
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.75rem', lineHeight: 1.4 }}>
+                Switching scenarios dynamically alters heart rate, HRV, and skin temperature drift parameters over time.
+              </p>
             </div>
           </div>
 
-          {/* Activity log */}
+          {/* Real Application Activity Event Log */}
           <div className="card">
-            <div style={{fontWeight:600, marginBottom:'0.75rem'}}>Activity Log</div>
-            {log.length === 0 ? (
-              <div style={{fontSize:'0.8rem', color:'var(--text-muted)'}}>No activity yet. Use controls above.</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
+              <div className="card-title">Real Application Activity Event Log</div>
+              <span className="mono" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Backend Stream Events</span>
+            </div>
+            {backendEvents.length === 0 ? (
+              <div className="state-center" style={{ padding: '1.5rem' }}>
+                No events logged yet. Click "Start Stream" above.
+              </div>
             ) : (
-              <div style={{fontFamily:'var(--font-mono)', fontSize:'0.78rem', display:'flex', flexDirection:'column', gap:'0.25rem', maxHeight:'200px', overflowY:'auto'}}>
-                {log.map((entry, i) => (
-                  <div key={i} style={{display:'flex', gap:'1rem', color: logColor[entry.type]}}>
-                    <span style={{color:'var(--text-muted)', minWidth:'70px'}}>{entry.t}</span>
-                    <span>{entry.msg}</span>
+              <div className="mono" style={{ fontSize: '0.78rem', display: 'flex', flexDirection: 'column', gap: '0.35rem', maxHeight: '240px', overflowY: 'auto' }}>
+                {backendEvents.map((entry, i) => (
+                  <div key={i} style={{ display: 'flex', gap: '0.85rem', color: 'var(--text-primary)' }}>
+                    <span style={{ color: 'var(--text-muted)', minWidth: '75px' }}>
+                      {new Date(entry.timestamp).toLocaleTimeString()}
+                    </span>
+                    <span style={{ color: entry.type === 'warn' ? 'var(--high)' : entry.type === 'error' ? 'var(--critical)' : 'var(--navy-dark)' }}>
+                      {entry.message}
+                    </span>
                   </div>
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Developer / Debug Controls Section */}
+          <div className="card" style={{ background: 'var(--bg-main)' }}>
+            <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '0.5rem' }}>
+              Developer / Debug Controls
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <button className="btn btn-sm" disabled={running || busy} onClick={handleTick}>
+                <RefreshCw size={14} />
+                <span>Execute Single Manual Tick</span>
+              </button>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                Generates a single discrete telemetry tick for manual debugging without starting continuous async loop.
+              </span>
+            </div>
           </div>
         </>
       )}

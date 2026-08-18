@@ -24,26 +24,26 @@ export const api = {
 
   // ── Soldiers ──────────────────────────────────────────────────────────────
   soldiers: {
-    list: () => request('/soldiers/'),
+    list: () => request('/soldiers'),
     get: (id) => request(`/soldiers/${id}`),
-    create: (data) => request('/soldiers/', { method: 'POST', body: JSON.stringify(data) }),
+    create: (data) => request('/soldiers', { method: 'POST', body: JSON.stringify(data) }),
     fatigue: (id) => request(`/soldiers/${id}/fatigue`),
     readings: (id, limit = 50) => request(`/soldiers/${id}/readings?limit=${limit}`),
-    features: (id, limit = 50) => request(`/soldiers/${id}/features?limit=${limit}`),
+    baseline: (id) => request(`/soldiers/${id}/baseline`),
     alerts: (id) => request(`/soldiers/${id}/alerts`),
   },
 
   // ── Squads ────────────────────────────────────────────────────────────────
   squads: {
-    list: () => request('/squads/'),
+    list: () => request('/squads'),
     get: (id) => request(`/squads/${id}`),
     status: (id) => request(`/squads/${id}/status`),
-    create: (data) => request('/squads/', { method: 'POST', body: JSON.stringify(data) }),
+    create: (data) => request('/squads', { method: 'POST', body: JSON.stringify(data) }),
   },
 
   // ── Missions ──────────────────────────────────────────────────────────────
   missions: {
-    list: () => request('/missions/'),
+    list: () => request('/missions'),
     get: (id) => request(`/missions/${id}`),
     start: (data) => request('/missions/start', { method: 'POST', body: JSON.stringify(data) }),
     end: (id) => request(`/missions/${id}/end`, { method: 'POST' }),
@@ -65,11 +65,12 @@ export const api = {
     start: () => request('/simulation/start', { method: 'POST' }),
     stop: () => request('/simulation/stop', { method: 'POST' }),
     tick: () => request('/simulation/tick', { method: 'POST' }),
+    setScenario: (scenario) => request('/simulation/scenario', { method: 'POST', body: JSON.stringify({ scenario }) }),
   },
 
   // ── Alerts ────────────────────────────────────────────────────────────────
   alerts: {
-    list: (limit = 50) => request(`/soldiers/alerts?limit=${limit}`),
+    list: (limit = 50, activeOnly = false) => request(`/soldiers/alerts?limit=${limit}&active_only=${activeOnly}`),
     acknowledge: (alertId) =>
       request(`/soldiers/alerts/${alertId}/acknowledge`, { method: 'POST' }),
   },

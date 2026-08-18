@@ -1,14 +1,29 @@
 """Service layer for squad-level aggregation."""
 from typing import List, Optional
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Squad, Soldier, FatigueAssessment, Alert, RiskCategory
 from app.services.soldier_service import get_latest_fatigue, get_latest_reading, get_latest_features
 
 
-async def get_all_squads(db: AsyncSession) -> List[Squad]:
+async def get_all_squads(db: AsyncSession) -> List[dict]:
     result = await db.execute(select(Squad))
-    return list(result.scalars().all())
+    squads = list(result.scalars().all())
+    out = []
+    for s in squads:
+        c_res = await db.execute(
+            select(func.count()).select_from(Soldier).where(Soldier.squad_id == s.id, Soldier.is_active == True)
+        )
+        count = c_res.scalar_one()
+        out.append({
+            "id": s.id,
+            "name": s.name,
+            "unit": s.unit,
+            "commander_name": s.commander_name,
+            "soldier_count": count,
+            "created_at": s.created_at.isoformat() if s.created_at else None,
+        })
+    return out
 
 
 async def get_squad_by_id(squad_id: int, db: AsyncSession) -> Optional[Squad]:

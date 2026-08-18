@@ -3,14 +3,15 @@ RAKSHAK Alert Service
 
 Generates alerts from fatigue assessment results.
 Implements cooldown logic to prevent duplicate alert spam.
+Manages alert lifecycle: ACTIVE -> ACKNOWLEDGED / RESOLVED.
 """
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import datetime, timedelta
+from typing import Optional, List
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models import Alert, AlertType, AlertSeverity, RiskCategory
+from app.models import Alert, AlertType, AlertSeverity, RiskCategory, MissionEvent, MissionPhase
 from app.ai.interface import FatigueResult
 
 # In-memory cooldown tracker: (soldier_id, alert_type) -> last_alert_time
@@ -37,45 +38,58 @@ async def check_and_create_alert(
 ) -> Optional[Alert]:
     """
     Evaluate the fatigue result and create an Alert if thresholds are crossed.
+    If risk has returned to NORMAL, auto-resolves any active unacknowledged alerts for this soldier.
     Respects cooldown to avoid alert flooding.
     """
     score = fatigue_result.fatigue_score
     category = fatigue_result.risk_category
-    
-    # Determine alert type and severity
+
+    # If soldier is back to NORMAL, auto-resolve any unacknowledged alerts
+    if category == RiskCategory.NORMAL or (isinstance(category, str) and category == "NORMAL") or score < 30.0:
+        active_result = await db.execute(
+            select(Alert).where(Alert.soldier_id == soldier_id, Alert.is_acknowledged == False)
+        )
+        active_alerts = list(active_result.scalars().all())
+        if active_alerts:
+            now = datetime.utcnow()
+            for a in active_alerts:
+                a.is_acknowledged = True
+                a.acknowledged_at = now
+            await db.commit()
+        return None
+
+    # Determine alert type and severity for elevated/high/critical
     alert_type: Optional[AlertType] = None
     severity: Optional[AlertSeverity] = None
     message = ""
-    
-    if category == RiskCategory.CRITICAL or score >= 75:
+
+    if category == RiskCategory.CRITICAL or (isinstance(category, str) and category == "CRITICAL") or score >= 75:
         alert_type = AlertType.FATIGUE_CRITICAL
         severity = AlertSeverity.CRITICAL
         message = (
-            f"CRITICAL fatigue risk detected (score={score:.1f}). "
-            f"Contributors: HR_dev={fatigue_result.contributors.get('hr_deviation', 0):.2f}, "
-            f"HRV_det={fatigue_result.contributors.get('hrv_deterioration', 0):.2f}, "
-            f"Activity={fatigue_result.contributors.get('activity_load', 0):.2f}. "
-            "Immediate rest recommended."
+            f"CRITICAL fatigue risk detected for Soldier {soldier_id} (score={score:.1f}). "
+            f"HRV deterioration: {fatigue_result.contributors.get('hrv_deterioration', 0):.2f}. "
+            "Immediate rest rotation recommended."
         )
-    elif category == RiskCategory.HIGH or score >= 55:
+    elif category == RiskCategory.HIGH or (isinstance(category, str) and category == "HIGH") or score >= 55:
         alert_type = AlertType.FATIGUE_HIGH
         severity = AlertSeverity.HIGH
         message = (
-            f"HIGH fatigue risk detected (score={score:.1f}). "
+            f"HIGH fatigue risk detected for Soldier {soldier_id} (score={score:.1f}). "
             f"Monitor soldier closely. HRV deterioration: {fatigue_result.contributors.get('hrv_deterioration', 0):.2f}."
         )
-    elif category == RiskCategory.ELEVATED or score >= 30:
+    elif category == RiskCategory.ELEVATED or (isinstance(category, str) and category == "ELEVATED") or score >= 30:
         alert_type = AlertType.FATIGUE_ELEVATED
         severity = AlertSeverity.ELEVATED
-        message = f"Elevated fatigue risk (score={score:.1f}). Continued monitoring advised."
-    
+        message = f"Elevated fatigue risk for Soldier {soldier_id} (score={score:.1f}). Continued monitoring advised."
+
     if alert_type is None:
-        return None  # NORMAL — no alert needed
-    
+        return None
+
     # Check cooldown
     if _is_in_cooldown(soldier_id, alert_type):
         return None
-    
+
     # Create alert
     alert = Alert(
         soldier_id=soldier_id,
@@ -88,6 +102,41 @@ async def check_and_create_alert(
         is_acknowledged=False,
     )
     db.add(alert)
+
+    # Record mission event if attached to a mission
+    if mission_id:
+        phase = MissionPhase.HIGH_ACTIVITY if severity in (AlertSeverity.HIGH, AlertSeverity.CRITICAL) else MissionPhase.PATROL
+        event = MissionEvent(
+            mission_id=mission_id,
+            timestamp=datetime.utcnow(),
+            phase=phase,
+            description=f"Alert [{severity.value}]: {message}",
+            affected_soldier_ids=str([soldier_id]),
+        )
+        db.add(event)
+
     await db.commit()
     _record_alert(soldier_id, alert_type)
     return alert
+
+
+async def acknowledge_alert(alert_id: int, db: AsyncSession) -> Optional[Alert]:
+    """Acknowledge a specific alert by ID."""
+    result = await db.execute(select(Alert).where(Alert.id == alert_id))
+    alert = result.scalar_one_or_none()
+    if alert and not alert.is_acknowledged:
+        alert.is_acknowledged = True
+        alert.acknowledged_at = datetime.utcnow()
+        await db.commit()
+    return alert
+
+
+async def get_all_alerts(
+    db: AsyncSession, limit: int = 50, active_only: bool = False
+) -> List[Alert]:
+    """Get system-wide alerts."""
+    stmt = select(Alert).order_by(desc(Alert.timestamp)).limit(limit)
+    if active_only:
+        stmt = stmt.where(Alert.is_acknowledged == False)
+    result = await db.execute(stmt)
+    return list(result.scalars().all())

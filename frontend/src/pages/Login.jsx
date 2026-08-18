@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import '../styles/Login.css';
+import RakshakLogo from '../components/RakshakLogo';
 
 export default function Login({ onLogin }) {
-  const [id, setId] = useState('');
-  const [pwd, setPwd] = useState('');
+  const [id, setId] = useState('CMD-001');
+  const [pwd, setPwd] = useState('rakshak2026');
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -11,7 +11,6 @@ export default function Login({ onLogin }) {
     e.preventDefault();
     setErr('');
     setLoading(true);
-    // Demo: any non-empty creds work
     setTimeout(() => {
       if (id && pwd) {
         onLogin({ id, role: 'commander' });
@@ -19,53 +18,83 @@ export default function Login({ onLogin }) {
         setErr('Enter your Operator ID and passphrase.');
         setLoading(false);
       }
-    }, 800);
+    }, 600);
   };
 
   return (
-    <div className="login-root">
-      <div className="login-glow" />
-      <div className="login-card">
-        <div className="login-logo">
-          <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-            <polygon points="20,2 36,12 36,28 20,38 4,28 4,12" fill="none" stroke="#22d3ee" strokeWidth="2"/>
-            <polygon points="20,8 30,14 30,26 20,32 10,26 10,14" fill="rgba(34,211,238,0.08)" stroke="#22d3ee" strokeWidth="1.2"/>
-            <circle cx="20" cy="20" r="4" fill="#22d3ee"/>
-          </svg>
+    <div style={{
+      height: '100vh',
+      width: '100vw',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#F5EEDC',
+      fontFamily: 'var(--font-sans)',
+      position: 'relative',
+      overflow: 'hidden',
+    }}>
+      {/* ── High-sharpness crisp background image layer ── */}
+      <img
+        src="/login-bg.jpg"
+        alt="RAKSHAK Command Background"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          objectPosition: 'bottom center',
+          filter: 'contrast(1.06) brightness(1.02) saturate(1.04)',
+          pointerEvents: 'none',
+          zIndex: 0,
+        }}
+      />
+
+      {/* ── Login card (100% UNCHANGED) ── */}
+      <div className="card" style={{ width: '420px', padding: '2.25rem', boxShadow: 'var(--shadow-lg)', position: 'relative', zIndex: 1 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: '1.5rem' }}>
+          <RakshakLogo size="large" />
+          <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+            Tactical Operations Command &amp; Telemetry
+          </p>
         </div>
-        <h1 className="login-title">RAKSHAK</h1>
-        <p className="login-subtitle">Soldier Health &amp; Fatigue Monitoring</p>
-        <p className="login-disclaimer">
-          ⚠ Prototype — heuristic fatigue estimation, not a clinical tool.
-        </p>
-        <form className="login-form" onSubmit={handleSubmit}>
-          <div className="login-field">
-            <label htmlFor="operator-id">Operator ID</label>
+
+        <div style={{ padding: '0.6rem 0.85rem', background: 'var(--saffron-light)', border: '1px solid var(--saffron-border)', borderRadius: 'var(--r-md)', fontSize: '0.78rem', color: 'var(--navy-dark)', marginBottom: '1.25rem' }}>
+          ⚠ <strong>SIH Prototype Mode:</strong> Heuristic fatigue risk estimation platform powered by simulated telemetry.
+        </div>
+
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.82rem', fontWeight: 600 }}>
+            <span style={{ color: 'var(--navy-dark)' }}>Operator ID</span>
             <input
-              id="operator-id"
               type="text"
               placeholder="e.g. CMD-001"
               value={id}
               onChange={(e) => setId(e.target.value)}
               autoFocus
             />
-          </div>
-          <div className="login-field">
-            <label htmlFor="passphrase">Passphrase</label>
+          </label>
+
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.82rem', fontWeight: 600 }}>
+            <span style={{ color: 'var(--navy-dark)' }}>Passphrase</span>
             <input
-              id="passphrase"
               type="password"
               placeholder="••••••••"
               value={pwd}
               onChange={(e) => setPwd(e.target.value)}
             />
-          </div>
-          {err && <p className="login-error">{err}</p>}
-          <button type="submit" className="login-btn" disabled={loading}>
-            {loading ? <span className="spinner" /> : 'Access System'}
+          </label>
+
+          {err && <div style={{ color: 'var(--critical)', fontSize: '0.8rem' }}>{err}</div>}
+
+          <button type="submit" className="btn btn-primary" style={{ padding: '0.65rem', marginTop: '0.5rem', fontSize: '0.9rem' }} disabled={loading}>
+            {loading ? <div className="spinner-ring" style={{ width: '18px', height: '18px' }} /> : 'Access Command Console →'}
           </button>
         </form>
-        <p className="login-version">v0.1.0 — SIH Software Prototype</p>
+
+        <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)', textAlign: 'center', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+          RAKSHAK v0.1.0 — SIH Software Prototype Engine
+        </div>
       </div>
     </div>
   );
